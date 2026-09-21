@@ -58,7 +58,7 @@
   .card { background: var(--cream); border-radius: 22px; padding: 20px 18px; box-shadow: 0 10px 30px rgba(11,74,85,.14); }
   label.f { display: block; font-weight: 600; font-size: 14px; margin: 0 0 6px; }
   .field { margin-bottom: 14px; }
-  input[type=text], input[type=tel] {
+  input[type=text], input[type=tel], input[type=email] {
     width: 100%; font: inherit; font-size: 17px; color: var(--ink);
     padding: 13px 14px; border: 2px solid var(--line); border-radius: 12px; background: var(--white);
     outline: none; transition: border-color .15s;
@@ -102,6 +102,20 @@
   }
   .btn2.ghost { background: transparent; color: var(--ink); border: 2px solid var(--ink); }
   .spark { font-size: 40px; line-height: 1; }
+  .btn2.dl { background: var(--yellow); color: var(--ink); box-shadow: 0 3px 0 #D9A40F; }
+
+  #step2 { text-align: left; margin-top: 16px; border-top: 2px dashed var(--line); padding-top: 16px; }
+  #step2 h2 { font-family: "Baloo 2", sans-serif; font-weight: 800; font-size: 22px; line-height: 1.1; margin: 0 0 4px; }
+  #step2 .sub { font-size: 14px; color: var(--ink-soft); margin: 0 0 14px; }
+  .q { margin-bottom: 16px; }
+  .q > b { display: block; font-size: 14px; margin-bottom: 7px; }
+  .q > b span { font-weight: 400; color: var(--ink-soft); }
+  .q .chips { grid-template-columns: 1fr 1fr; }
+  .q .chips button { font-size: 13.5px; padding: 9px 6px; }
+  textarea { width: 100%; font: inherit; font-size: 16px; color: var(--ink); padding: 11px 13px; border: 2px solid var(--line); border-radius: 12px; background: var(--white); resize: vertical; min-height: 64px; outline: none; }
+  textarea:focus { border-color: var(--ink); }
+  .skip { display: block; text-align: center; margin-top: 12px; font-size: 14px; color: var(--ink-soft); background: none; border: 0; text-decoration: underline; cursor: pointer; width: 100%; font-family: inherit; }
+  #final { display: none; }
 </style>
 </head>
 <body>
@@ -159,9 +173,26 @@
     <div class="spark">&#10024;</div>
     <div class="big" id="doneTitle">You're all set!</div>
     <p id="doneText">I'll put your plan together and text you from <b>519.503.0442</b> shortly.</p>
-    <p>Want to go over it live?</p>
-    <a class="btn2" href="https://calendar.app.google/PERfTK4Dkwq7HDjZ7" target="_blank" rel="noopener">Book a 15-min Selling Strategy Call</a>
-    <a class="btn2 ghost" href="tel:+15195030442">Call Nik now</a>
+    <a class="btn2 dl" href="ROI_Checklist.pdf" target="_blank" rel="noopener" download>Download your Quick-Win ROI Checklist</a>
+
+    <form id="step2" novalidate>
+      <h2>Want a sharper plan?</h2>
+      <p class="sub">A few quick taps (about 60 seconds). Skip anything you like.</p>
+      <div class="q">
+        <b>Where should I email your checklist? <span>(optional)</span></b>
+        <input type="email" id="email" autocomplete="email" inputmode="email" placeholder="you@email.com" maxlength="120">
+      </div>
+      <div id="questions"></div>
+      <button class="go" type="submit" id="go2">Finish My Plan</button>
+      <p class="msg" id="msg2" role="alert"></p>
+      <button class="skip" type="button" id="skip">Skip for now</button>
+    </form>
+
+    <div id="final">
+      <p style="margin-top:14px">Want to go over it live?</p>
+      <a class="btn2" href="https://calendar.app.google/PERfTK4Dkwq7HDjZ7" target="_blank" rel="noopener">Book a 15-min Selling Strategy Call</a>
+      <a class="btn2 ghost" href="tel:+15195030442">Call Nik now</a>
+    </div>
   </div>
 
   <footer>Corcoran Horizon Realty, Brokerage<br>618 King St W, Kitchener, ON N2G 1C8<br>Not intended to solicit properties currently listed for sale.</footer>
@@ -175,6 +206,76 @@
   var params = new URLSearchParams(location.search);
   var $ = function (id) { return document.getElementById(id); };
   var timeline = '';
+  var token = '';
+
+  // Step 2. Keys and answers must match QUESTIONS in lead-page/intake/Code.gs.
+  var QUESTIONS = [
+    { k: 'listedFor', q: 'How long was your home on the market?', o: ['Under 1 month', '1-3 months', '3-6 months', '6+ months'] },
+    { k: 'stopped', q: 'What do you think stopped it from selling?', hint: 'pick any', multi: true, o: ['Price', 'Not enough showings', 'Photos or marketing', "Home's condition", 'Slow market', 'We pulled it ourselves', 'Not sure'] },
+    { k: 'agentGood', q: 'What did your last agent do well?', hint: 'pick any', multi: true, o: ['Communication', 'Pricing advice', 'Photos', 'Showings', 'Nothing stood out'] },
+    { k: 'wishDifferent', q: "What do you wish they'd done differently?", hint: 'optional', text: true },
+    { k: 'nextAgent', q: 'What matters most in your next agent?', hint: 'pick 2', multi: true, max: 2, o: ['Honest pricing', 'Stronger marketing', 'Regular updates', 'Tough negotiating', 'Fewer disruptions'] },
+    { k: 'homeType', q: 'What kind of home is it?', o: ['Detached', 'Semi', 'Townhouse', 'Condo'] },
+    { k: 'updates', q: 'Anything updated since it came off the market?', o: ['Nothing yet', 'Small fixes', 'Bigger updates'] },
+    { k: 'tryAgain', q: 'What would have to be true for you to try again?', o: ["Price I'd net", 'Right timing', 'Right agent', 'Not sure yet'] }
+  ];
+  var answers = {};
+
+  function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+  $('questions').innerHTML = QUESTIONS.map(function (x) {
+    var head = '<b>' + esc(x.q) + (x.hint ? ' <span>(' + x.hint + ')</span>' : '') + '</b>';
+    if (x.text) return '<div class="q">' + head + '<textarea id="q_' + x.k + '" maxlength="300" placeholder="e.g. more open houses, straight talk on price"></textarea></div>';
+    return '<div class="q">' + head + '<div class="chips" data-k="' + x.k + '">' +
+      x.o.map(function (o) { return '<button type="button" aria-pressed="false">' + esc(o) + '</button>'; }).join('') + '</div></div>';
+  }).join('');
+
+  $('questions').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    var box = b.parentNode, k = box.getAttribute('data-k');
+    var q = QUESTIONS.filter(function (x) { return x.k === k; })[0];
+    var on = b.getAttribute('aria-pressed') !== 'true';
+    if (!q.multi) Array.prototype.forEach.call(box.children, function (x) { x.setAttribute('aria-pressed', 'false'); });
+    if (on && q.max && box.querySelectorAll('[aria-pressed=true]').length >= q.max) return;
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    var picked = Array.prototype.filter.call(box.children, function (x) { return x.getAttribute('aria-pressed') === 'true'; })
+      .map(function (x) { return x.textContent; });
+    answers[k] = q.multi ? picked : (picked[0] || '');
+  });
+
+  function showFinal() {
+    $('step2').style.display = 'none';
+    $('final').style.display = 'block';
+  }
+  $('skip').addEventListener('click', showFinal);
+
+  $('step2').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = $('email').value.trim();
+    $('email').classList.remove('bad');
+    if (email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) { $('msg2').textContent = 'Please check your email address.'; $('email').classList.add('bad'); return; }
+    var a = {};
+    Object.keys(answers).forEach(function (k) { a[k] = answers[k]; });
+    a.wishDifferent = $('q_wishDifferent').value.trim();
+    if (email) a.email = email;
+    var go = $('go2');
+    go.disabled = true; go.textContent = 'Sending...';
+    fetch(ENDPOINT, { method: 'POST', body: JSON.stringify({ kind: 'details', token: token, answers: a }) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.error || 'Something went wrong');
+        $('doneTitle').textContent = 'Got it, thank you!';
+        $('doneText').innerHTML = email
+          ? 'Your checklist is on its way to <b>' + esc(email) + '</b>. I\'ll use your answers to build your plan and text you from <b>519.503.0442</b> shortly.'
+          : 'I\'ll use your answers to build your plan and text you from <b>519.503.0442</b> shortly.';
+        showFinal();
+        window.scrollTo(0, 0);
+      })
+      .catch(function (err) {
+        go.disabled = false; go.textContent = 'Finish My Plan';
+        $('msg2').textContent = (err && err.message && err.message !== 'Failed to fetch') ? err.message : 'Connection problem. Nik will ask you these on the call.';
+      });
+  });
 
   // ?a=123+Main+St fills the address (one QR per house). ?c= tags the campaign.
   if (params.get('a')) $('address').value = params.get('a').slice(0, 150);
@@ -228,6 +329,8 @@
       })
     }).then(function (r) { return r.json(); }).then(function (res) {
       if (!res.ok) throw new Error(res.error || 'Something went wrong');
+      token = res.token || '';
+      if (!token) { $('step2').style.display = 'none'; $('final').style.display = 'block'; }
       $('doneTitle').textContent = 'Thanks, ' + name.split(' ')[0] + '!';
       $('ask').style.display = 'none';
       $('done').style.display = 'block';
